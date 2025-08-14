@@ -1,0 +1,73 @@
+# Sample SEM Campaign Optimizer Configuration
+# This is a working example - customize for your specific needs
+
+inputs:
+  # Example fitness brand
+  brand_website: "https://www.myprotein.com"
+  
+  # Competitor example
+  competitor_website: "https://www.optimumnutrition.com"
+  
+  # Target service locations
+  service_locations:
+    - "New York"
+    - "Los Angeles" 
+    - "Chicago"
+    - "Houston"
+    - "Phoenix"
+    - "Philadelphia"
+    - "San Antonio"
+    - "San Diego"
+    - "Dallas"
+    - "Austin"
+  
+  # Monthly campaign budgets (in USD)
+  budgets:
+    shopping_ads: 8000    # 40% of total budget
+    search_ads: 10000     # 50% of total budget  
+    pmax_ads: 2000        # 10% of total budget
+
+# Campaign performance assumptions
+conversion_rate: 0.025    # 2.5% conversion rate
+target_roas: 4.0         # 400% return on ad spend target
+
+# Optional: OpenAI API key for enhanced LLM analysis
+# Get your key from: https://platform.openai.com/api-keys
+# If not provided, tool uses deterministic fallback methods
+gemini_api_key: "AIzaSyBR7vOGXb2whXg5YNkKda88glehgsJ5rd0"  # Add your key here for better keyword categorization
+
+# Advanced settings (optional - defaults work well)
+advanced:
+  min_search_volume: 500        # Minimum monthly search volume
+  max_cpc_multiplier: 1.5       # Maximum CPC as multiplier of suggested bid
+  keyword_expansion_limit: 75   # Maximum keywords per theme
+  quality_score_target: 7       # Target quality score for ad groups
+  
+  # Industry-specific settings
+  high_value_industries:
+    - "insurance"
+    - "legal" 
+    - "finance"
+    - "software"
+    - "healthcare"
+  
+  # Keyword filtering
+  negative_keywords:
+    - "free"
+    - "cheap" 
+    - "wholesale"
+    - "job"
+    - "career"
+    
+  # Bid adjustment factors
+  bid_adjustments:
+    mobile: 0.9       # 10% decrease for mobile
+    tablet: 1.0       # No adjustment for tablet
+    desktop: 1.1      # 10% increase for desktop
+    
+# Performance tracking
+tracking:
+  conversion_tracking: true
+  enhanced_conversions: true
+  google_analytics_linking: true
+  attribution_model: "data_driven"

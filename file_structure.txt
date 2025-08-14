@@ -1,0 +1,14 @@
+sem-keyword-tool/
+├─ config.yaml
+├─ src/
+│  ├─ main.py           # entrypoint / CLI
+│  ├─ data_collect.py   # GKP automation + CSV load
+│  ├─ website_scrape.py # optional: get product text from website
+│  ├─ llm_utils.py      # prompts / LLM wrappers
+│  ├─ clean_transform.py# dedupe, min volume filter, normalize
+│  ├─ cluster.py        # semantic grouping (LLM + sklearn fallback)
+│  ├─ bids.py           # CPC/CPA computation & allocation
+│  └─ export.py         # csv/xlsx/report generation
+├─ notebooks/            # exploration
+├─ outputs/
+└─ requirements.txt
