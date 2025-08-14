@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Main execution script for the SEM Campaign Optimizer
 Run this script to execute the complete optimization process
@@ -103,33 +102,26 @@ class SEMOptimizationSuite:
         try:
             results = {}
             
-            # Phase 1: Website Analysis and Keyword Discovery
             logger.info("Phase 1: Website Analysis and Keyword Discovery")
             basic_results = self.sem_optimizer.run_campaign_optimization()
             results['basic_analysis'] = basic_results
             
-            # Log warnings for website scrape failures
             if basic_results['website_analysis']['competitor_website'].get('error'):
                 logger.warning(f"Competitor website scrape failed: {basic_results['website_analysis']['competitor_website']['error']}")
             
-            # Log LLM fallback usage
             if basic_results['campaign_summary'].get('used_fallback_categorization'):
                 logger.warning("Used fallback method for keyword categorization due to LLM failure")
             
-            # Phase 2: Enhanced Keyword Analysis
             logger.info("Phase 2: Enhanced Keyword Analysis")
             all_keywords = []
             for ad_group in basic_results['search_campaign']['ad_groups']:
                 all_keywords.extend([kw['keyword'] for kw in ad_group['keywords']])
             
-            # Expand keywords further
             max_expansions = self.config['advanced']['keyword_expansion_limit']
             expanded_keywords = self.keyword_planner.expand_keywords(all_keywords, max_expansions=max_expansions)
             
-            # Get enhanced metrics
             enhanced_keyword_metrics = self.keyword_planner.get_keyword_metrics(expanded_keywords)
             
-            # Convert to dict format for compatibility
             enhanced_keywords_dict = []
             for kw_metric in enhanced_keyword_metrics:
                 enhanced_keywords_dict.append({
@@ -142,35 +134,29 @@ class SEMOptimizationSuite:
                     'trend': kw_metric.trend
                 })
             
-            # Create keyword expansion report
             keyword_report = create_keyword_expansion_report(
                 enhanced_keyword_metrics, 
                 get_unique_filename(f"keyword_expansion_report_{self.timestamp}.json")
             )
             results['keyword_analysis'] = keyword_report
             
-            # Phase 3: Advanced Campaign Building
             logger.info("Phase 3: Advanced Campaign Building")
             
-            # Build search campaigns
             search_campaigns = self.campaign_builder.build_search_campaigns(
                 enhanced_keywords_dict, 
                 self.config['inputs']['budgets']
             )
             
-            # Build Performance Max strategy
             pmax_strategy = self.campaign_builder.create_performance_max_strategy(
                 enhanced_keywords_dict,
                 self.config['inputs']['budgets']['pmax_ads']
             )
             
-            # Build Shopping strategy
             shopping_strategy = self.campaign_builder.create_shopping_campaign_strategy(
                 enhanced_keywords_dict,
                 self.config['inputs']['budgets']['shopping_ads']
             )
             
-            # Phase 4: Generate Comprehensive Report
             logger.info("Phase 4: Generating Comprehensive Report")
             campaign_report = self.campaign_builder.generate_campaign_report(
                 search_campaigns,
@@ -180,7 +166,6 @@ class SEMOptimizationSuite:
             
             results['advanced_campaigns'] = campaign_report
             
-            # Phase 5: Export Results
             logger.info("Phase 5: Exporting Results")
             self._export_all_results(results, search_campaigns, pmax_strategy, shopping_strategy)
             
@@ -197,21 +182,17 @@ class SEMOptimizationSuite:
     
     def _export_all_results(self, results: dict, search_campaigns, pmax_strategy, shopping_strategy):
         """Export all results to various formats"""
-        # 1. Save complete results as JSON
         output_filename = get_unique_filename(f"sem_optimization_results_{self.timestamp}.json")
         with open(output_filename, 'w', encoding='utf-8') as f:
             json.dump(results, f, indent=2, default=str)
         logger.info(f"Complete results saved to: {output_filename}")
         
-        # 2. Save campaign structure
         campaign_structure_filename = get_unique_filename(f"campaign_structure_{self.timestamp}.json")
         save_campaign_structure(results['advanced_campaigns'], campaign_structure_filename)
         
-        # 3. Export to Google Ads Editor format
         google_ads_filename = get_unique_filename(f"google_ads_import_{self.timestamp}.csv")
         export_to_google_ads_editor(search_campaigns, google_ads_filename)
         
-        # 4. Create summary CSV for keywords
         self._create_keyword_summary_csv(results)
         
         # 5. Create budget allocation summary
@@ -221,7 +202,6 @@ class SEMOptimizationSuite:
         self._create_executive_summary(results)
     
     def _create_keyword_summary_csv(self, results: dict):
-        """Create a comprehensive keyword summary CSV"""
         all_keywords = []
         
         # Extract keywords from advanced campaigns
@@ -262,7 +242,6 @@ class SEMOptimizationSuite:
             'campaign_budget_distribution': {}
         }
         
-        # Add detailed campaign budgets
         if 'advanced_campaigns' in results:
             exec_summary = results['advanced_campaigns'].get('executive_summary', {})
             budget_summary['campaign_budget_distribution'] = {
@@ -280,26 +259,22 @@ class SEMOptimizationSuite:
         """Create executive summary document"""
         summary_content = []
         
-        # Header
         summary_content.append("# SEM Campaign Optimization - Executive Summary")
         summary_content.append(f"**Generated:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         summary_content.append(f"**Brand Website:** {self.config['inputs']['brand_website']}")
         summary_content.append(f"**Competitor Website:** {self.config['inputs']['competitor_website']}")
         summary_content.append("")
         
-        # Warn about website scrape errors
         if 'basic_analysis' in results and 'website_analysis' in results['basic_analysis']:
             if results['basic_analysis']['website_analysis']['competitor_website'].get('error'):
                 summary_content.append("**Warning:** Failed to extract content from competitor website. Results may lack competitor insights.")
                 logger.warning("Competitor website scrape failed, using brand content only")
         
-        # Warn about LLM fallback
         if results.get('basic_analysis', {}).get('campaign_summary', {}).get('used_fallback_categorization', False):
             summary_content.append("**Warning:** Used fallback method for keyword categorization due to LLM failure. Keyword groupings may be less precise.")
             logger.warning("Fallback keyword categorization used")
         summary_content.append("")
         
-        # Budget Overview
         summary_content.append("## Budget Allocation")
         total_budget = sum(self.config['inputs']['budgets'].values())
         summary_content.append(f"**Total Monthly Budget:** ${total_budget:,.2f}")
@@ -426,7 +401,6 @@ def main():
         # Run complete optimization
         results = optimizer_suite.run_complete_optimization()
         
-        # Print summary
         optimizer_suite.print_optimization_summary(results)
         
         return results

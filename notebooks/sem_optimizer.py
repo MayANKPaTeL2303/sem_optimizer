@@ -414,7 +414,7 @@ class SEMCampaignOptimizer:
         
         try:
             prompt = f"""
-            Analyze the following website content and generate 15-20 high-value seed keywords for SEM campaigns.
+            Analyze the following website content and generate 10 high-value seed keywords for SEM campaigns.
             
             Brand Website Content:
             Title: {brand_content.get('title', '')}
@@ -907,11 +907,9 @@ class SEMCampaignOptimizer:
     def save_results(self, results: Dict[str, Any], output_file: str = 'sem_campaign_results.json'):
         """Save results to a JSON file and export keywords to CSV in an output folder."""
     
-    # Create 'output' directory if it doesn't exist
         output_dir = 'output'
         os.makedirs(output_dir, exist_ok=True)
     
-    # Full path for JSON output
         json_path = os.path.join(output_dir, output_file)
     
     # Save JSON file

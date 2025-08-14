@@ -1,5 +1,5 @@
 # SEM Campaign Optimization - Executive Summary
-**Generated:** 2025-08-14 09:09:53
+**Generated:** 2025-08-14 22:22:16
 **Brand Website:** https://cubehq.ai
 **Competitor Website:** https://www.superagi.com
 
@@ -12,19 +12,19 @@
 - **Pmax Ads:** $2,000.00 (10.0%)
 
 ## Campaign Structure
-**Total Campaigns:** 6
-**Average Target ROAS:** 4.40
+**Total Campaigns:** 2
+**Average Target ROAS:** 4.00
 
 ### Campaign Distribution
-- **Search Campaigns:** 3
+- **Search Campaigns:** 1
 - **Performance Max Campaigns:** 1
-- **Shopping Campaigns:** 2
+- **Shopping Campaigns:** 0
 
 ## Keyword Analysis
 **Total Keywords Discovered:** 75
-**High Volume Keywords (>5K searches):** 59
-**Low CPC Opportunities (<$1.00):** 11
-**Average Search Volume:** 26,608
+**High Volume Keywords (>5K searches):** 33
+**Low CPC Opportunities (<$1.00):** 15
+**Average Search Volume:** 12,688
 
 ## Key Recommendations
 
@@ -44,8 +44,8 @@
 
 ## Generated Files
 The following files have been generated for your review:
-- `sem_optimization_results_20250814_090640_1.json` - Complete results
-- `campaign_structure_20250814_090640_1.json` - Detailed campaign structure
-- `google_ads_import_20250814_090640_1.csv` - Google Ads Editor import file
-- `keyword_summary_20250814_090640_1.csv` - Keyword analysis spreadsheet
-- `budget_summary_20250814_090640_1.json` - Budget allocation details
+- `sem_optimization_results_20250814_222056_1.json` - Complete results
+- `campaign_structure_20250814_222056_1.json` - Detailed campaign structure
+- `google_ads_import_20250814_222056_1.csv` - Google Ads Editor import file
+- `keyword_summary_20250814_222056_1.csv` - Keyword analysis spreadsheet
+- `budget_summary_20250814_222056_1.json` - Budget allocation details

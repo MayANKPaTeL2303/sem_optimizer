@@ -9,13 +9,14 @@ from typing import List, Dict, Any, Tuple
 from dataclasses import dataclass, asdict
 import math
 import logging
+import google.generativeai as genai
 
 logger = logging.getLogger(__name__)
 
 @dataclass
 class CampaignStructure:
     campaign_name: str
-    campaign_type: str  # Search, Shopping, Performance Max
+    campaign_type: str  
     daily_budget: float
     target_cpa: float
     target_roas: float
@@ -37,6 +38,16 @@ class AdvancedCampaignBuilder:
         self.conversion_rate = config.get('conversion_rate', 0.02)
         self.target_roas = config.get('target_roas', 4.0)  # 400% ROAS target
         
+        # Configure Google Gemini 1.5 Flash
+        api_key = config.get('gemini_api_key')
+        if api_key:
+            genai.configure(api_key=api_key)
+            self.model = genai.GenerativeModel('gemini-1.5-flash')
+            logger.info("Google Gemini 1.5 Flash model initialized successfully.")
+        else:
+            self.model = None
+            logger.warning("Gemini API key not provided. Falling back to static methods.")
+        
     def build_search_campaigns(self, keyword_data: List[Dict], budgets: Dict) -> List[CampaignStructure]:
         """
         Build optimized search campaigns with advanced structuring
@@ -51,28 +62,24 @@ class AdvancedCampaignBuilder:
         competitor_keywords = self._filter_competitor_keywords(keyword_data)
         generic_keywords = self._filter_generic_keywords(keyword_data)
         
-        # Campaign 1: High-Performance Keywords
         if high_performance_keywords:
             high_perf_campaign = self._create_high_performance_campaign(
                 high_performance_keywords, budgets['search_ads'] * 0.4
             )
             campaigns.append(high_perf_campaign)
         
-        # Campaign 2: Brand Protection
         if brand_keywords:
             brand_campaign = self._create_brand_campaign(
                 brand_keywords, budgets['search_ads'] * 0.2
             )
             campaigns.append(brand_campaign)
         
-        # Campaign 3: Competitor Targeting
         if competitor_keywords:
             competitor_campaign = self._create_competitor_campaign(
                 competitor_keywords, budgets['search_ads'] * 0.2
             )
             campaigns.append(competitor_campaign)
         
-        # Campaign 4: Generic Terms
         if generic_keywords:
             generic_campaign = self._create_generic_campaign(
                 generic_keywords, budgets['search_ads'] * 0.2
@@ -80,18 +87,136 @@ class AdvancedCampaignBuilder:
             campaigns.append(generic_campaign)
         
         return campaigns
+    def _extract_product_category(self, keyword: str) -> str:
+        """Extract product category from keyword for cubehq.ai products"""
+        keyword_lower = keyword.lower()
+    
+        category_mapping = {
+        'analytics': ['analytics', 'analysis', 'insights', 'metrics', 'kpi'],
+        'dashboard': ['dashboard', 'visualization', 'report', 'chart', 'graph'],
+        'integration': ['integration', 'api', 'connect', 'sync', 'import'],
+        'automation': ['automate', 'auto', 'scheduled', 'workflow', 'pipeline'],
+        'ai': ['ai', 'machine learning', 'ml', 'predictive', 'forecast']
+        }
+    
+    # Check keyword against each category
+        for category, terms in category_mapping.items():
+            if any(term in keyword_lower for term in terms):
+                return category.capitalize()
+    
+    # Default category if no match found
+        return 'General'
+    
+    def _estimate_shopping_performance(self, campaigns: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Estimate performance metrics for Shopping campaigns"""
+        total_metrics = {
+        'estimated_daily_clicks': 0,
+        'estimated_daily_conversions': 0,
+        'estimated_daily_cost': 0,
+        'estimated_daily_value': 0,
+        'estimated_roas': 0
+        }
+    
+        for campaign in campaigns:
+            campaign_metrics = {
+            'estimated_daily_clicks': 0,
+            'estimated_daily_conversions': 0,
+            'estimated_daily_cost': 0,
+            'estimated_daily_value': 0
+            }
+        
+            for product_group in campaign.get('product_groups', []):
+                suggested_cpc = product_group.get('suggested_cpc', 0)
+                metrics = product_group.get('performance_metrics', {})
+            
+                estimated_ctr = 0.02 
+                monthly_searches = metrics.get('avg_monthly_searches', 0)
+                daily_clicks = int((monthly_searches / 30) * estimated_ctr)
+            
+                conversions = daily_clicks * self.conversion_rate
+            
+                cost = daily_clicks * suggested_cpc
+                value = conversions * (suggested_cpc * self.target_roas) / self.conversion_rate
+            
+                campaign_metrics['estimated_daily_clicks'] += daily_clicks
+                campaign_metrics['estimated_daily_conversions'] += conversions
+                campaign_metrics['estimated_daily_cost'] += cost
+                campaign_metrics['estimated_daily_value'] += value
+            
+                total_metrics['estimated_daily_clicks'] += daily_clicks
+                total_metrics['estimated_daily_conversions'] += conversions
+                total_metrics['estimated_daily_cost'] += cost
+                total_metrics['estimated_daily_value'] += value
+        
+            campaign['estimated_performance'] = campaign_metrics
+            if campaign_metrics['estimated_daily_cost'] > 0:
+                campaign['estimated_performance']['estimated_roas'] = (
+                    campaign_metrics['estimated_daily_value'] / campaign_metrics['estimated_daily_cost']
+                )
+    
+        # Calculate overall ROAS
+        if total_metrics['estimated_daily_cost'] > 0:
+            total_metrics['estimated_roas'] = (
+                total_metrics['estimated_daily_value'] / total_metrics['estimated_daily_cost']
+            )
+    
+        return total_metrics
+    
+    def _generate_shopping_optimizations(self, campaigns: List[Dict[str, Any]]) -> List[str]:
+        """Generate optimization recommendations for Shopping campaigns"""
+        optimizations = []
+    
+        # Check if we have high priority campaigns
+        high_priority_campaigns = [c for c in campaigns if c.get('priority') == 'High']
+        if high_priority_campaigns:
+            optimizations.append(
+                "Prioritize high-performing product groups with increased bids during peak conversion times"
+            )
+    
+        # Check budget allocation
+        total_budget = sum(c.get('daily_budget', 0) for c in campaigns)
+        if total_budget > 0:
+            high_priority_ratio = sum(
+                c.get('daily_budget', 0) for c in campaigns if c.get('priority') == 'High'
+            ) / total_budget
+        
+            if high_priority_ratio < 0.5:
+                optimizations.append(
+                    "Consider reallocating more budget to high priority campaigns (currently {:.0f}%)".format(
+                        high_priority_ratio * 100
+                    )
+                )
+    
+        # Check for high CPC products
+        for campaign in campaigns:
+            for product_group in campaign.get('product_groups', []):
+                cpc = product_group.get('suggested_cpc', 0)
+                competition = product_group.get('performance_metrics', {}).get('competition_level', 0)
+            
+                if cpc > 5.0 and competition > 0.7:
+                    optimizations.append(
+                        f"Review bids for {product_group['name']} (high CPC ${cpc:.2f} and high competition)"
+                    )
+    
+        # Default optimizations
+        optimizations.extend([
+            "Review search term reports weekly to identify new negative keywords",
+            "Optimize product feed with high-performing keywords in titles and descriptions",
+            "Test different product image styles (lifestyle vs white background)",
+            "Implement remarketing audiences for Shopping campaign viewers"
+        ])
+    
+        return optimizations[:5] 
     
     def _filter_high_performance_keywords(self, keywords: List[Dict]) -> List[Dict]:
         """Filter keywords with high commercial intent and good volume/competition ratio"""
         high_performance = []
         
         for kw in keywords:
-            # Calculate performance score
             volume = kw.get('avg_monthly_searches', 0)
             comp_score = kw.get('competition_score', 1.0)
             cpc_low = kw.get('top_page_bid_low', 0)
             
-            # Performance score: high volume, low competition, reasonable CPC
             if volume > 2000 and comp_score < 0.6 and cpc_low < 5.0:
                 performance_score = (volume / 1000) * (1 - comp_score) / (cpc_low + 0.1)
                 if performance_score > 100:
@@ -137,7 +262,7 @@ class AdvancedCampaignBuilder:
             campaign_type="Search",
             daily_budget=budget / 30,
             target_cpa=target_cpa,
-            target_roas=self.target_roas * 1.2,  # Higher ROAS expectation
+            target_roas=self.target_roas * 1.2,  
             ad_groups=ad_groups
         )
     
@@ -152,14 +277,14 @@ class AdvancedCampaignBuilder:
         }]
         
         avg_cpc = sum(kw.get('top_page_bid_low', 1.0) for kw in keywords) / len(keywords)
-        target_cpa = avg_cpc / (self.conversion_rate * 2)  # Higher conversion rate expected
+        target_cpa = avg_cpc / (self.conversion_rate * 2)  
         
         return CampaignStructure(
             campaign_name="Brand Protection",
             campaign_type="Search",
             daily_budget=budget / 30,
             target_cpa=target_cpa,
-            target_roas=self.target_roas * 1.5,  # Brand terms should perform better
+            target_roas=self.target_roas * 1.5,  
             ad_groups=ad_groups
         )
     
@@ -175,16 +300,22 @@ class AdvancedCampaignBuilder:
         }]
         
         avg_cpc = sum(kw.get('top_page_bid_high', 1.0) for kw in keywords) / len(keywords)
-        target_cpa = avg_cpc / (self.conversion_rate * 0.8)  # Lower conversion rate expected
+        target_cpa = avg_cpc / (self.conversion_rate * 0.8) 
         
         return CampaignStructure(
             campaign_name="Competitor Targeting",
             campaign_type="Search",
             daily_budget=budget / 30,
             target_cpa=target_cpa,
-            target_roas=self.target_roas * 0.8,  # Lower ROAS acceptable
+            target_roas=self.target_roas * 0.8, 
             ad_groups=ad_groups
         )
+    def _calculate_target_cpc(self, keyword_data: Dict[str, Any]) -> float:
+        """Calculate target CPC based on conversion rate and target ROAS"""
+        avg_cpc = keyword_data.get('top_page_bid_high', 1.0)
+        target_cpa = (avg_cpc * self.target_roas) / self.conversion_rate
+        target_cpc = target_cpa * self.conversion_rate
+        return round(target_cpc, 2)
     
     def _create_generic_campaign(self, keywords: List[Dict], budget: float) -> CampaignStructure:
         """Create generic terms campaign"""
@@ -206,7 +337,6 @@ class AdvancedCampaignBuilder:
         """Create ad groups optimized for performance"""
         ad_groups = []
         
-        # Group by CPC ranges for better bid management
         high_cpc_keywords = [kw for kw in keywords if kw.get('top_page_bid_high', 0) > 3.0]
         medium_cpc_keywords = [kw for kw in keywords if 1.0 <= kw.get('top_page_bid_high', 0) <= 3.0]
         low_cpc_keywords = [kw for kw in keywords if kw.get('top_page_bid_high', 0) < 1.0]
@@ -268,7 +398,7 @@ class AdvancedCampaignBuilder:
             elif any(term in keyword_lower for term in ['what', 'how', 'why', 'when', 'where']):
                 themes['Question Terms'].append(kw)
             else:
-                themes['Product Terms'].append(kw)  # Default
+                themes['Product Terms'].append(kw)  
         
         ad_groups = []
         for theme_name, theme_keywords in themes.items():
@@ -313,12 +443,12 @@ class AdvancedCampaignBuilder:
         total_monthly_searches = sum(kw.get('avg_monthly_searches', 0) for kw in keywords)
         daily_searches = total_monthly_searches / 30
         
-        # Estimate CTR based on avg position (simplified)
-        estimated_ctr = 0.02  # 2% baseline CTR
+        # Estimate CTR based on avg position 
+        estimated_ctr = 0.02  
         if avg_cpc > 3.0:
-            estimated_ctr *= 1.5  # Higher CPC usually means better position
+            estimated_ctr *= 1.5  
         elif avg_cpc < 1.0:
-            estimated_ctr *= 0.7  # Lower CPC might mean lower position
+            estimated_ctr *= 0.7  
         
         estimated_daily_clicks = int(daily_searches * estimated_ctr)
         return max(1, estimated_daily_clicks)
@@ -344,9 +474,9 @@ class AdvancedCampaignBuilder:
             asset_group = {
                 'name': f"{theme_name} Asset Group",
                 'theme': theme_name,
-                'target_keywords': [kw['keyword'] for kw in theme_keywords[:10]],  # Top 10 per theme
+                'target_keywords': [kw['keyword'] for kw in theme_keywords[:10]], 
                 'audience_signals': self._generate_audience_signals(theme_keywords),
-                'budget_allocation': theme_budget / 30,  # Daily budget
+                'budget_allocation': theme_budget / 30, 
                 'target_cpa': avg_cpc / self.conversion_rate,
                 'target_roas': self.target_roas,
                 'creative_themes': self._generate_creative_themes(theme_name, theme_keywords),
@@ -374,97 +504,126 @@ class AdvancedCampaignBuilder:
     def _analyze_keyword_themes(self, keywords: List[Dict]) -> Dict[str, List[Dict]]:
         """Analyze keywords to identify natural themes for Performance Max"""
         themes = {
-            'Product Focus': [],
-            'Service Focus': [],
-            'Brand Focus': [],
-            'Local Focus': [],
-            'Problem Solving': []
+        'Product Category Themes': [],      
+        'Use-case Based Themes': [],         
+        'Demographic Themes': [],             
+        'Seasonal/Event-Based Themes': [],    
+        'Solution-Focused Themes': []        
         }
+
+        product_terms = ['analytics', 'dashboard', 'reporting', 'insights', 'metrics', 'kpi', 'visualization']
+        use_case_terms = ['customer', 'behavior', 'predictive', 'trend', 'forecast', 'tracking', 'monitoring']
+        demographic_terms = ['saas', 'enterprise', 'startup', 'ecommerce', 'marketing', 'sales', 'team']
+        seasonal_terms = ['q1', 'q2', 'q3', 'q4', 'quarterly', 'annual', 'year end', 'monthly']
+        solution_terms = ['integration', 'automated', 'real-time', 'scalable', 'custom', 'embedded']
         
         for kw in keywords:
             keyword_lower = kw['keyword'].lower()
-            
-            # Product-focused themes
-            if any(term in keyword_lower for term in ['product', 'buy', 'purchase', 'order', 'shop']):
-                themes['Product Focus'].append(kw)
-            # Service-focused themes  
-            elif any(term in keyword_lower for term in ['service', 'help', 'support', 'consultation', 'hire']):
-                themes['Service Focus'].append(kw)
-            # Brand-focused themes
-            elif any(term in keyword_lower for term in ['brand', 'company', 'official', 'reviews']):
-                themes['Brand Focus'].append(kw)
-            # Location-focused themes
-            elif any(term in keyword_lower for term in ['near', 'local', 'around', 'nearby', 'in']):
-                themes['Local Focus'].append(kw)
-            # Problem-solving themes
-            elif any(term in keyword_lower for term in ['how to', 'solution', 'fix', 'solve', 'help']):
-                themes['Problem Solving'].append(kw)
+        
+            if any(term in keyword_lower for term in product_terms):
+                themes['Product Category Themes'].append(kw)
+            elif any(term in keyword_lower for term in use_case_terms):
+                themes['Use-case Based Themes'].append(kw)
+            elif any(term in keyword_lower for term in demographic_terms):
+                themes['Demographic Themes'].append(kw)
+            elif any(term in keyword_lower for term in seasonal_terms):
+                themes['Seasonal/Event-Based Themes'].append(kw)
+            elif any(term in keyword_lower for term in solution_terms):
+                themes['Solution-Focused Themes'].append(kw)
             else:
-                # Default to product focus
-                themes['Product Focus'].append(kw)
+                themes['Product Category Themes'].append(kw)
         
         # Remove empty themes
         return {k: v for k, v in themes.items() if v}
     
     def _generate_audience_signals(self, keywords: List[Dict]) -> List[str]:
-        """Generate audience signals based on keyword analysis"""
-        signals = []
-        
-        # Analyze keywords to infer audience interests
+        """Generate audience signals based on keyword analysis using Gemini if available"""
         keyword_text = ' '.join(kw['keyword'].lower() for kw in keywords)
-        
-        if 'fitness' in keyword_text or 'health' in keyword_text:
-            signals.extend(['Fitness enthusiasts', 'Health conscious consumers'])
-        if 'business' in keyword_text or 'professional' in keyword_text:
-            signals.extend(['Business professionals', 'Entrepreneurs'])
-        if 'home' in keyword_text or 'house' in keyword_text:
-            signals.extend(['Homeowners', 'Home improvement enthusiasts'])
-        if 'tech' in keyword_text or 'software' in keyword_text:
-            signals.extend(['Technology enthusiasts', 'Software users'])
-        
-        # Add demographic signals based on keyword characteristics
+    
+        if self.model:
+            prompt = f"""Based on these keywords related to AI analytics (cubehq.ai): {keyword_text}
+    Generate a list of 5 highly relevant audience signals for Google Ads campaigns targeting business analytics professionals.
+    Focus on signals like job roles, industries, and business needs.
+    Output as a bullet list."""
+            try:
+                response = self.model.generate_content(prompt)
+                signals = [line.strip('- ').strip() for line in response.text.split('\n') if line.strip()]
+                return signals[:5]
+            except Exception as e:
+                logger.error(f"Error generating audience signals with Gemini: {e}")
+
+        # Fallback logic specifically for cubehq.ai (AI analytics platform)
+        signals = []
+
+        # Industry signals
+        if 'saas' in keyword_text or 'software' in keyword_text:
+            signals.extend(['SaaS companies', 'Software development teams'])
+        if 'ecommerce' in keyword_text or 'retail' in keyword_text:
+            signals.extend(['Ecommerce managers', 'Retail analytics teams'])
+        if 'marketing' in keyword_text or 'growth' in keyword_text:
+            signals.extend(['Marketing analysts', 'Growth teams'])
+
+        # Job role signals
+        if 'analyst' in keyword_text or 'analytics' in keyword_text:
+            signals.extend(['Data analysts', 'Business intelligence professionals'])
+        if 'cto' in keyword_text or 'technical' in keyword_text:
+            signals.extend(['CTOs', 'Technical decision makers'])
+
+        # Business size signals
+        if 'enterprise' in keyword_text or 'large' in keyword_text:
+            signals.append('Enterprise businesses')
+        if 'startup' in keyword_text or 'small business' in keyword_text:
+            signals.append('Startup founders')
+
+        # Add high-value signals based on CPC
         avg_cpc = sum(kw.get('top_page_bid_high', 1.0) for kw in keywords) / len(keywords)
         if avg_cpc > 5.0:
-            signals.append('High-income demographics')
-        
-        return signals[:5]  # Limit to top 5 signals
+            signals.append('High-budget analytics teams')
+
+        unique_signals = list(dict.fromkeys(signals)) 
+        return unique_signals[:5] 
     
     def _generate_creative_themes(self, theme_name: str, keywords: List[Dict]) -> List[str]:
         """Generate creative themes for asset groups"""
         theme_mapping = {
-            'Product Focus': [
-                'Product benefits and features',
-                'Customer testimonials',
-                'Product comparisons',
-                'Special offers and discounts'
-            ],
-            'Service Focus': [
-                'Service quality and expertise',
-                'Customer success stories',
-                'Process explanations',
-                'Professional credentials'
-            ],
-            'Brand Focus': [
-                'Brand story and values',
-                'Company achievements',
-                'Customer loyalty',
-                'Brand differentiation'
-            ],
-            'Local Focus': [
-                'Local community connection',
-                'Geographic service areas',
-                'Local testimonials',
-                'Proximity benefits'
-            ],
-            'Problem Solving': [
-                'Solution-focused messaging',
-                'Before and after scenarios',
-                'Expert guidance',
-                'Problem identification'
-            ]
+        'Product Category Themes': [
+            'AI-powered analytics dashboard features',
+            'Real-time data visualization capabilities',
+            'Custom reporting tool demonstrations',
+            'Key metric tracking showcase'
+        ],
+        'Use-case Based Themes': [
+            'Customer behavior analysis workflows',
+            'Predictive modeling use cases',
+            'Trend identification processes',
+            'Performance monitoring scenarios'
+        ],
+        'Demographic Themes': [
+            'SaaS company analytics solutions',
+            'Enterprise-grade AI reporting',
+            'Startup-friendly analytics pricing',
+            'Marketing team dashboard examples'
+        ],
+        'Seasonal/Event-Based Themes': [
+            'Quarterly reporting preparation',
+            'Year-end analytics packages',
+            'Monthly performance review templates',
+            'Seasonal trend analysis tools'
+        ],
+        'Solution-Focused Themes': [
+            'Data integration challenges solved',
+            'Automated reporting time savings',
+            'Custom analytics implementation',
+            'Scalable dashboard solutions'
+        ]
         }
-        
-        return theme_mapping.get(theme_name, ['Generic product/service benefits'])
+    
+        return theme_mapping.get(theme_name, [
+            'AI-powered business intelligence',
+            'Advanced analytics solutions',
+            'Data-driven decision making',
+            'Interactive reporting tools'
+        ])
     
     def _define_conversion_goals(self) -> List[Dict[str, Any]]:
         """Define conversion goals for Performance Max"""
@@ -477,7 +636,7 @@ class AdvancedCampaignBuilder:
             },
             {
                 'goal_type': 'Lead Generation',
-                'value': 50.0,  # Estimated lead value
+                'value': 50.0, 
                 'attribution_model': 'First-click',
                 'priority': 'Secondary'
             }
@@ -487,60 +646,65 @@ class AdvancedCampaignBuilder:
         """Create Shopping campaign strategy with product prioritization"""
         logger.info("Creating Shopping campaign strategy...")
         
-        # Analyze keywords for product insights
+        # Filter and prioritize products
         product_keywords = [kw for kw in keyword_data if self._is_product_keyword(kw['keyword'])]
-        
-        # Create priority tiers
         high_priority_products = self._identify_high_priority_products(product_keywords)
         medium_priority_products = self._identify_medium_priority_products(product_keywords)
+    
+        # Create product groups with calculated bids
+        high_priority_groups = self._create_product_groups(high_priority_products, 'high')
+        medium_priority_groups = self._create_product_groups(medium_priority_products, 'medium')
         
         campaigns = []
         
-        # High Priority Campaign (60% of budget)
-        if high_priority_products:
+        # High Priority Campaign
+        if high_priority_groups:
             high_priority_campaign = {
-                'campaign_name': 'Shopping - High Priority',
-                'campaign_type': 'Shopping',
-                'campaign_subtype': 'Standard Shopping',
-                'priority': 'High',
-                'daily_budget': (budget * 0.6) / 30,
-                'bidding_strategy': 'Target ROAS',
-                'target_roas': self.target_roas * 1.2,
-                'product_groups': self._create_product_groups(high_priority_products, 'high'),
-                'negative_keywords': self._generate_shopping_negative_keywords(),
-                'bid_adjustments': {
-                    'mobile': 0.9,
-                    'tablet': 1.0,
-                    'desktop': 1.1
-                }
+            'campaign_name': 'Shopping - High Priority',
+            'campaign_type': 'Shopping',
+            'priority': 'High',
+            'daily_budget': (budget * 0.6) / 30,
+            'bidding_strategy': 'Target CPA',
+            'target_cpa': round(
+                sum(pg['target_cpc'] for pg in high_priority_groups) / 
+                len(high_priority_groups) / self.conversion_rate, 2),
+            'product_groups': high_priority_groups,
+            'bid_adjustments': {
+                'mobile': 0.9,
+                'tablet': 1.0,
+                'desktop': 1.1
             }
+        }
             campaigns.append(high_priority_campaign)
         
-        # Medium Priority Campaign (40% of budget)
-        if medium_priority_products:
+        # Medium Priority Campaign
+        if medium_priority_groups:
             medium_priority_campaign = {
-                'campaign_name': 'Shopping - Medium Priority',
-                'campaign_type': 'Shopping',
-                'campaign_subtype': 'Standard Shopping',
-                'priority': 'Medium',
-                'daily_budget': (budget * 0.4) / 30,
-                'bidding_strategy': 'Enhanced CPC',
-                'target_cpa': sum(kw.get('top_page_bid_high', 1.0) for kw in medium_priority_products) / len(medium_priority_products) / self.conversion_rate,
-                'product_groups': self._create_product_groups(medium_priority_products, 'medium'),
-                'negative_keywords': self._generate_shopping_negative_keywords(),
-                'bid_adjustments': {
-                    'mobile': 1.0,
-                    'tablet': 1.0,
-                    'desktop': 1.0
-                }
+            'campaign_name': 'Shopping - Medium Priority',
+            'campaign_type': 'Shopping',
+            'priority': 'Medium',
+            'daily_budget': (budget * 0.4) / 30,
+            'bidding_strategy': 'Manual CPC',
+            'product_groups': medium_priority_groups,
+            'bid_adjustments': {
+                'mobile': 1.0,
+                'tablet': 1.0,
+                'desktop': 1.0
+            }
             }
             campaigns.append(medium_priority_campaign)
         
         return {
-            'campaigns': campaigns,
-            'merchant_center_optimization': self._create_merchant_center_recommendations(keyword_data),
-            'feed_optimization': self._create_feed_optimization_recommendations(keyword_data)
+        'campaigns': campaigns,
+        'budget_allocation': {
+            'high_priority': round(budget * 0.6, 2),
+            'medium_priority': round(budget * 0.4, 2)
+        },
+        'target_settings': {
+            'conversion_rate': self.conversion_rate,
+            'target_roas': self.target_roas
         }
+    }
     
     def _is_product_keyword(self, keyword: str) -> bool:
         """Check if keyword indicates product intent"""
@@ -556,7 +720,6 @@ class AdvancedCampaignBuilder:
             cpc_high = kw.get('top_page_bid_high', 0)
             comp_score = kw.get('competition_score', 1.0)
             
-            # High volume, reasonable CPC, not too competitive
             priority_score = volume / max(1, cpc_high) * (1 - comp_score)
             
             if priority_score > 500 and volume > 1000:
@@ -583,38 +746,72 @@ class AdvancedCampaignBuilder:
         # Group by keyword themes
         grouped_keywords = {}
         for kw in keywords:
-            # Simple grouping by first word (can be enhanced)
-            first_word = kw['keyword'].split()[0].lower()
-            if first_word not in grouped_keywords:
-                grouped_keywords[first_word] = []
-            grouped_keywords[first_word].append(kw)
-        
-        for group_name, group_keywords in grouped_keywords.items():
-            if len(group_keywords) >= 2:  # Only create groups with multiple keywords
-                avg_cpc = sum(kw.get('top_page_bid_high', 1.0) for kw in group_keywords) / len(group_keywords)
-                
-                # Adjust CPC based on priority
-                if priority_level == 'high':
-                    max_cpc = avg_cpc * 1.1
-                else:
-                    max_cpc = avg_cpc * 0.9
-                
-                product_group = {
-                    'name': f"{group_name.title()} Products",
-                    'max_cpc': round(max_cpc, 2),
-                    'keywords': [kw['keyword'] for kw in group_keywords],
-                    'estimated_performance': {
-                        'avg_monthly_searches': sum(kw.get('avg_monthly_searches', 0) for kw in group_keywords),
-                        'competition_level': sum(kw.get('competition_score', 0) for kw in group_keywords) / len(group_keywords)
-                    }
-                }
-                
-                product_groups.append(product_group)
-        
-        return product_groups
+            category = self._extract_product_category(kw['keyword'])
+            if category not in grouped_keywords:
+                grouped_keywords[category] = []
+            grouped_keywords[category].append(kw)
     
-    def _generate_shopping_negative_keywords(self) -> List[str]:
-        """Generate negative keywords for Shopping campaigns"""
+        for category, group_keywords in grouped_keywords.items():
+            if len(group_keywords) < 1: 
+                continue
+             # Calculate performance metrics
+            avg_monthly_searches = sum(kw.get('avg_monthly_searches', 0) for kw in group_keywords) / len(group_keywords)
+            avg_top_page_bid_low = sum(kw.get('top_page_bid_low', 0) for kw in group_keywords) / len(group_keywords)
+            avg_top_page_bid_high = sum(kw.get('top_page_bid_high', 0) for kw in group_keywords) / len(group_keywords)
+            avg_competition = sum(kw.get('competition_score', 0) for kw in group_keywords) / len(group_keywords)
+
+            target_cpc = self._calculate_target_cpc({
+            'top_page_bid_high': avg_top_page_bid_high,
+            'competition_score': avg_competition
+            })
+        
+            if priority_level == 'high':
+                target_cpc *= 1.1  # Increase bids for high priority
+            elif priority_level == 'medium':
+                target_cpc *= 0.9  # Decrease bids for medium priority
+            
+            if avg_competition > 0.7:  # High competition
+                target_cpc *= 1.05  # Slightly increase bids
+            elif avg_competition < 0.3:  # Low competition
+                target_cpc *= 0.95  # Slightly decrease bids
+        
+
+
+            product_group = {
+            'name': f"{category} Products",
+            'category': category,
+            'target_cpc': target_cpc,
+            'max_cpc': min(target_cpc * 1.2, avg_top_page_bid_high * 1.5),  
+            'performance_metrics': {
+                'avg_monthly_searches': round(avg_monthly_searches),
+                'top_page_bid_low': round(avg_top_page_bid_low, 2),
+                'top_page_bid_high': round(avg_top_page_bid_high, 2),
+                'competition_level': round(avg_competition, 2),
+                'estimated_conversion_rate': self.conversion_rate,
+                'estimated_cpa': round(target_cpc / self.conversion_rate, 2)
+            },
+            'keywords': [kw['keyword'] for kw in group_keywords]
+        }
+        
+            product_groups.append(product_group)
+
+        return sorted(product_groups, key=lambda x: x['performance_metrics']['avg_monthly_searches'], reverse=True)
+    
+    def _generate_shopping_negative_keywords(self, keyword_data: List[Dict]) -> List[str]:
+        """Generate negative keywords for Shopping campaigns using Gemini if available"""
+        keyword_text = ', '.join(kw['keyword'] for kw in keyword_data)
+        
+        if self.model:
+            prompt = f"""Based on these keywords: {keyword_text}
+Generate 15 negative keywords for Google Shopping campaigns to avoid low-intent or irrelevant traffic.
+Output as a bullet list."""
+            try:
+                response = self.model.generate_content(prompt)
+                negatives = [line.strip('- ').strip() for line in response.text.split('\n') if line.strip()]
+                return negatives[:15]
+            except Exception as e:
+                logger.error(f"Error generating negative keywords with Gemini: {e}")
+        
         return [
             'free',
             'cheap',
@@ -733,16 +930,14 @@ def export_to_google_ads_editor(campaigns: List[CampaignStructure], filename: st
     rows = []
     
     for campaign in campaigns:
-        # Campaign row
         rows.append({
             'Campaign': campaign.campaign_name,
             'Campaign Type': campaign.campaign_type,
             'Campaign Status': 'Enabled',
-            'Budget': campaign.daily_budget * 30,  # Monthly budget
+            'Budget': campaign.daily_budget * 30, 
             'Bid Strategy': 'Target ROAS' if campaign.target_roas > 0 else 'Target CPA'
         })
         
-        # Ad group rows
         for ad_group in campaign.ad_groups:
             for keyword in ad_group.get('keywords', []):
                 rows.append({
