@@ -7,7 +7,7 @@ pip install -r requirements.txt
 ```
 
 ### 2. Configure Your Campaign
-Edit the config.yaml file
+Copy the sample_config.yaml file
 ```yaml
 
 inputs:
